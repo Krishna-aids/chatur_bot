@@ -1,0 +1,45 @@
+# ── NovaMind v2 — Full Requirements ───────────────────────────
+# Install: uv pip install -r requirements.txt
+# Or:      pip install -r requirements.txt --break-system-packages
+
+# ── Web framework ──────────────────────────────────────────────
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+python-multipart>=0.0.9        # file uploads
+python-dotenv>=1.0.0           # .env loading
+
+# ── LangChain stack ────────────────────────────────────────────
+langchain>=0.2.0
+langchain-core>=0.2.0
+langchain-groq>=0.1.0          # ChatGroq LLM client
+langchain-community>=0.2.0     # DuckDuckGoSearchRun + other community tools
+
+# ── RAG ────────────────────────────────────────────────────────
+chromadb>=0.4.0                # vector store
+sentence-transformers>=2.2.2   # MiniLM embeddings (all-MiniLM-L6-v2)
+
+# ── Database ───────────────────────────────────────────────────
+mysql-connector-python>=8.3.0  # session memory + message history
+
+# ── Voice pipeline ─────────────────────────────────────────────
+edge-tts>=6.1.9                # primary TTS (Microsoft Neural, free)
+gtts>=2.3.0                    # fallback TTS (Google, free)
+SpeechRecognition>=3.10.0      # Google STT fallback
+httpx>=0.27.0                  # async HTTP for Groq Whisper STT
+
+# ── Document parsing ───────────────────────────────────────────
+PyMuPDF>=1.23.0                # PDF text extraction (fitz)
+python-docx>=1.0.0             # DOCX parsing
+
+# ── Web search ─────────────────────────────────────────────────
+ddgs>=0.1.0                    # web search (renamed from duckduckgo-search)
+
+# ── Utilities ──────────────────────────────────────────────────
+requests>=2.31.0               # sync HTTP (WeatherTool, DDG fallback)
+twilio>=8.0.0                  # WhatsApp webhook signature validation
+
+# ── Optional (install for better audio merging) ────────────────
+# pydub>=0.25.1                # clean MP3 chunk merging (requires ffmpeg)
+
+supabase>=2.0.0                 # Supabase Python client

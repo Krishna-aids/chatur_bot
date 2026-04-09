@@ -1,0 +1,30 @@
+NovaMind AI Assistant — Product Overview
+
+NovaMind is an AI-powered chatbot platform built for enterprises and individuals.
+
+Key Features:
+1. Multi-model LLM routing: Uses llama-3.1-8b-instant for fast responses and llama-3.3-70b-versatile for complex reasoning tasks.
+2. RAG (Retrieval-Augmented Generation): Upload PDF, DOCX, or TXT files and ask questions from them. Uses MiniLM embeddings for semantic search.
+3. Voice Mode: Real-time speech-to-text using Groq Whisper and text-to-speech via Edge TTS.
+4. Long-term Memory: Stores user facts and conversation summaries in Supabase.
+5. Web Search: Live data lookup using DuckDuckGo for weather, news, and current events.
+
+Pricing Plans:
+- Free Tier: 100 messages/month, 5MB file uploads, 1 active session
+- Pro Tier (/month): Unlimited messages, 500MB uploads, voice mode, 10 sessions
+- Enterprise (/month): Custom LLMs, API access, dedicated support, unlimited sessions
+
+Refund Policy:
+All plans are billed monthly. Refunds are available within 7 days of purchase. Digital products are non-refundable after the first use. Contact support@novamind.ai for help.
+
+Technical Stack:
+- Backend: FastAPI + Python 3.11
+- LLM Provider: Groq API
+- Database: Supabase (PostgreSQL)
+- Embeddings: sentence-transformers/all-MiniLM-L6-v2
+- Frontend: Vanilla JS + CSS
+
+Support:
+Email: support@novamind.ai
+Docs: docs.novamind.ai
+Status: status.novamind.ai

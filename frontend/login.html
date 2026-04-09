@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Chatur AI — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── DESIGN TOKENS (identical to main UI) ─────────────── */
+    :root {
+      --bg:           #0a0a0b;
+      --bg2:          #111113;
+      --bg3:          #18181c;
+      --bg4:          #1f1f25;
+      --border:       rgba(255,255,255,0.07);
+      --border2:      rgba(255,255,255,0.12);
+      --text:         #e8e8ec;
+      --text2:        #8a8a9a;
+      --text3:        #45454f;
+      --accent:       #7c6af7;
+      --accent2:      #5a4fd4;
+      --accent-glow:  rgba(124,106,247,0.14);
+      --teal:         #2dd4bf;
+      --danger:       #f87171;
+      --warn:         #fbbf24;
+      --success:      #34d399;
+      --radius:       12px;
+      --radius-lg:    18px;
+      --font-head:    'Syne', sans-serif;
+      --font-body:    'DM Sans', sans-serif;
+      --transition:   0.2s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      /* subtle grid background */
+      background-image:
+        linear-gradient(rgba(124,106,247,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(124,106,247,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    button { cursor: pointer; font-family: var(--font-body); }
+    input  { font-family: var(--font-body); }
+
+    /* ── CARD ─────────────────────────────────────────────── */
+    .auth-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 24px;
+      padding: 36px 32px;
+      box-shadow: 0 0 0 1px var(--border),
+                  0 24px 64px rgba(0,0,0,0.5),
+                  0 0 80px rgba(124,106,247,0.06);
+    }
+
+    /* ── LOGO ─────────────────────────────────────────────── */
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .logo-mark {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--accent), var(--teal));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .logo-mark svg { width: 18px; height: 18px; }
+    .logo-text {
+      font-family: var(--font-head);
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: -0.4px;
+    }
+    .logo-text span { color: var(--accent); }
+
+    /* ── TABS ─────────────────────────────────────────────── */
+    .tab-row {
+      display: flex;
+      background: var(--bg3);
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 28px;
+      gap: 2px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 8px;
+      border: none;
+      background: none;
+      color: var(--text2);
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 8px;
+      transition: background var(--transition), color var(--transition);
+    }
+    .tab-btn.active {
+      background: var(--bg4);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    /* ── PANELS ───────────────────────────────────────────── */
+    .panel { display: none; flex-direction: column; gap: 16px; }
+    .panel.active { display: flex; }
+
+    /* ── FIELD ────────────────────────────────────────────── */
+    .field-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text2);
+      margin-bottom: 6px;
+      letter-spacing: 0.2px;
+    }
+    .field-input {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 14px;
+      padding: 11px 14px;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .field-input::placeholder { color: var(--text3); }
+    .field-input:focus {
+      border-color: rgba(124,106,247,0.5);
+      box-shadow: 0 0 0 3px rgba(124,106,247,0.08);
+    }
+
+    /* api key field with copy button */
+    .key-field-wrap {
+      position: relative;
+    }
+    .key-field-wrap .field-input {
+      padding-right: 44px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+    .copy-btn {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--bg4);
+      border: 1px solid var(--border2);
+      color: var(--text2);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      transition: background var(--transition), color var(--transition);
+    }
+    .copy-btn:hover { background: var(--accent-glow); color: var(--accent); }
+    .copy-btn.copied { color: var(--success); border-color: var(--success); }
+
+    /* optional collapsible field */
+    .optional-toggle {
+      font-size: 12px;
+      color: var(--text3);
+      background: none;
+      border: none;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: color var(--transition);
+      margin-top: -4px;
+    }
+    .optional-toggle:hover { color: var(--text2); }
+    .optional-toggle svg {
+      width: 12px; height: 12px;
+      transition: transform var(--transition);
+    }
+    .optional-toggle.open svg { transform: rotate(180deg); }
+
+    .optional-field {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: -4px;
+    }
+    .optional-field.open { display: flex; }
+
+    /* ── SUBMIT BTN ───────────────────────────────────────── */
+    .submit-btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: var(--font-head);
+      letter-spacing: 0.2px;
+      transition: background var(--transition), transform 0.1s, opacity var(--transition);
+      margin-top: 4px;
+    }
+    .submit-btn:hover   { background: var(--accent2); }
+    .submit-btn:active  { transform: scale(0.98); }
+    .submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ── ALERT ────────────────────────────────────────────── */
+    .alert {
+      padding: 11px 14px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      display: none;
+      align-items: flex-start;
+      gap: 8px;
+      line-height: 1.5;
+    }
+    .alert.show { display: flex; }
+    .alert-error   { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); color: var(--danger); }
+    .alert-success { background: rgba(52,211,153,0.1);  border: 1px solid rgba(52,211,153,0.2);  color: var(--success); }
+    .alert-info    { background: var(--accent-glow);    border: 1px solid rgba(124,106,247,0.2); color: var(--accent); }
+
+    /* ── KEY REVEAL BOX ───────────────────────────────────── */
+    .key-reveal {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      background: var(--bg3);
+      border: 1px solid rgba(52,211,153,0.2);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .key-reveal.show { display: flex; }
+    .key-reveal-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--success);
+      letter-spacing: 0.3px;
+    }
+    .key-reveal-note {
+      font-size: 12px;
+      color: var(--text2);
+    }
+
+    /* ── DIVIDER ──────────────────────────────────────────── */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text3);
+      font-size: 11px;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── SERVER STATUS ────────────────────────────────────── */
+    .server-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--text3);
+      padding: 10px 14px;
+      background: var(--bg3);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--text3);
+    }
+    .status-dot.online  { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-dot.offline { background: var(--danger); }
+    .status-dot.checking { animation: pulse 1s infinite; background: var(--warn); }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.4; }
+    }
+
+    /* ── LOADING SPINNER IN BTN ───────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── FOOTER NOTE ──────────────────────────────────────── */
+    .auth-footer {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text3);
+    }
+    .auth-footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .auth-footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 480px) {
+      body { padding: 16px; }
+      .auth-card { padding: 28px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="auth-card">
+
+  <!-- Logo -->
+  <div class="logo-row">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <span class="logo-text">Cha<span>tur</span></span>
+  </div>
+
+  <!-- Server status -->
+  <div class="server-status" id="server-status">
+    <div class="status-dot checking" id="status-dot"></div>
+    <span id="status-text">Checking server...</span>
+  </div>
+
+  <br/>
+
+  <!-- Tabs -->
+  <div class="tab-row">
+    <button class="tab-btn active" id="tab-login"    onclick="switchTab('login')">Sign in</button>
+    <button class="tab-btn"        id="tab-register" onclick="switchTab('register')">Get API key</button>
+  </div>
+
+  <!-- ── LOGIN PANEL ───────────────────────────────────────── -->
+  <div class="panel active" id="panel-login">
+
+    <div class="alert alert-error" id="login-error"></div>
+
+    <div>
+      <div class="field-label">Email</div>
+      <input class="field-input" type="email" id="login-email"
+             placeholder="tarun@example.com" autocomplete="email"/>
+    </div>
+
+    <div>
+      <div class="field-label">API Key</div>
+      <input class="field-input" type="password" id="login-key"
+             placeholder="nm_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"/>
+    </div>
+
+    <!-- optional server URL -->
+    <button class="optional-toggle" id="opt-toggle-login" onclick="toggleOptional('login')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+      Advanced: custom server URL
+    </button>
+    <div class="optional-field" id="opt-field-login">
+      <div class="field-label">API Base URL</div>
+      <input class="field-input" type="url" id="login-api-url"
+             placeholder="http://localhost:8000"/>
+      <div style="font-size:11px;color:var(--text3)">Leave blank to use default (localhost:8000)</div>
+    </div>
+
+    <button class="submit-btn" id="login-btn" onclick="doLogin()">Sign in</button>
+
+    <div style="text-align:center;font-size:13px;color:var(--text2)">
+      Don't have an API key?
+      <button onclick="switchTab('register')"
+        style="background:none;border:none;color:var(--accent);font-size:13px;padding:0;cursor:pointer;font-family:var(--font-body)">
+        Get one free →
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ── REGISTER PANEL ────────────────────────────────────── -->
+  <div class="panel" id="panel-register">
+
+    <div class="alert alert-error"   id="reg-error"></div>
+    <div class="alert alert-info"    id="reg-info">Registration is free. Your API key gives you access to all Chatur features.</div>
+
+    <div>
+      <div class="field-label">Your name</div>
+      <input class="field-input" type="text" id="reg-name"
+             placeholder="Tarun Dange" autocomplete="name"/>
+    </div>
+
+    <div>
+      <div class="field-label">Email</div>
+      <input class="field-input" type="email" id="reg-email"
+             placeholder="tarun@example.com" autocomplete="email"/>
+    </div>
+
+    <!-- optional server URL -->
+    <button class="optional-toggle" id="opt-toggle-reg" onclick="toggleOptional('reg')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+      Advanced: custom server URL
+    </button>
+    <div class="optional-field" id="opt-field-reg">
+      <div class="field-label">API Base URL</div>
+      <input class="field-input" type="url" id="reg-api-url"
+             placeholder="http://localhost:8000"/>
+      <div style="font-size:11px;color:var(--text3)">Leave blank to use default (localhost:8000)</div>
+    </div>
+
+    <!-- key reveal (shown after successful register) -->
+    <div class="key-reveal" id="key-reveal">
+      <div class="key-reveal-title">✓ Registration successful</div>
+      <div class="field-label" style="margin-bottom:0">Your API key</div>
+      <div class="key-field-wrap">
+        <input class="field-input" type="text" id="revealed-key" readonly/>
+        <button class="copy-btn" id="copy-btn" onclick="copyKey()">Copy</button>
+      </div>
+      <div class="key-reveal-note">Save this key — it won't be shown again on this screen.</div>
+    </div>
+
+    <button class="submit-btn" id="reg-btn" onclick="doRegister()">Get my API key</button>
+    <button class="submit-btn" id="continue-btn"
+            style="display:none;background:var(--teal);color:#0a0a0b"
+            onclick="continueToApp()">
+      Continue to Chatur →
+    </button>
+
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+const DEFAULT_API = 'http://localhost:8000';
+
+// ── server health check ──────────────────────────────────────
+async function checkServer(baseUrl) {
+  const dot  = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  dot.className  = 'status-dot checking';
+  text.textContent = 'Checking server...';
+  try {
+    const r = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(4000) });
+    const d = await r.json();
+    if (r.ok) {
+      dot.className    = 'status-dot online';
+      text.textContent = `Connected · ${baseUrl.replace('http://','').replace('https://','')}`;
+    } else throw new Error('bad status');
+  } catch {
+    dot.className    = 'status-dot offline';
+    text.textContent = 'Server offline — start uvicorn first';
+  }
+}
+
+// get effective api base
+function getApiBase() {
+  return localStorage.getItem('nm_api_base') || DEFAULT_API;
+}
+
+// run check on load
+checkServer(getApiBase());
+
+// ── tab switching ────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('panel-login').classList.toggle('active', tab === 'login');
+  document.getElementById('panel-register').classList.toggle('active', tab === 'register');
+  document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+  clearAlerts();
+}
+
+function clearAlerts() {
+  ['login-error','reg-error'].forEach(id => {
+    const el = document.getElementById(id);
+    el.className = el.className.replace(' show','');
+  });
+}
+
+function showAlert(id, msg, type='error') {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = `alert alert-${type} show`;
+}
+
+// ── optional field toggle ─────────────────────────────────────
+function toggleOptional(prefix) {
+  const btn   = document.getElementById(`opt-toggle-${prefix}`);
+  const field = document.getElementById(`opt-field-${prefix}`);
+  const open  = field.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+
+// ── save api base ─────────────────────────────────────────────
+function saveApiBase(inputId) {
+  const val = document.getElementById(inputId).value.trim();
+  const base = val || DEFAULT_API;
+  // if changing server, clear old session
+  const old = localStorage.getItem('nm_api_base') || DEFAULT_API;
+  if (base !== old) {
+    localStorage.removeItem('nm_session_id');
+  }
+  localStorage.setItem('nm_api_base', base);
+  checkServer(base);
+  return base;
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────
+async function doLogin() {
+  const email  = document.getElementById('login-email').value.trim();
+  const apiKey = document.getElementById('login-key').value.trim();
+  clearAlerts();
+
+  if (!email || !apiKey) {
+    showAlert('login-error', 'Please enter your email and API key.');
+    return;
+  }
+
+  const base = saveApiBase('login-api-url');
+  const btn  = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Signing in...';
+
+  try {
+    // verify key by fetching it from server
+    const r = await fetch(`${base}/auth/key?email=${encodeURIComponent(email)}`);
+    const d = await r.json();
+
+    if (!r.ok) {
+      showAlert('login-error', d.detail || 'Email not found. Please register first.');
+      return;
+    }
+
+    // check key matches
+    if (d.api_key !== apiKey) {
+      showAlert('login-error', 'API key does not match. Check your key and try again.');
+      return;
+    }
+
+    if (!d.is_active) {
+      showAlert('login-error', 'Your API key has been deactivated. Contact support.');
+      return;
+    }
+
+    // save to localStorage
+    localStorage.setItem('nm_api_key',   apiKey);
+    localStorage.setItem('nm_user_name', d.name);
+    localStorage.setItem('nm_user_email',email);
+
+    window.location.href = 'index.html';
+
+  } catch (err) {
+    showAlert('login-error', 'Cannot reach server. Is it running?');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign in';
+  }
+}
+
+// ── REGISTER ──────────────────────────────────────────────────
+async function doRegister() {
+  const name  = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  clearAlerts();
+
+  if (!name)  { showAlert('reg-error', 'Please enter your name.'); return; }
+  if (!email || !email.includes('@')) {
+    showAlert('reg-error', 'Please enter a valid email address.');
+    return;
+  }
+
+  const base = saveApiBase('reg-api-url');
+  const btn  = document.getElementById('reg-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Registering...';
+
+  try {
+    const r = await fetch(`${base}/auth/register`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ name, email }),
+    });
+    const d = await r.json();
+
+    if (!r.ok) {
+      showAlert('reg-error', d.detail || 'Registration failed. Try again.');
+      return;
+    }
+
+    // show key reveal
+    document.getElementById('reg-info').classList.remove('show');
+    document.getElementById('revealed-key').value = d.api_key;
+    document.getElementById('key-reveal').classList.add('show');
+    btn.style.display = 'none';
+    document.getElementById('continue-btn').style.display = '';
+
+    // save immediately
+    localStorage.setItem('nm_api_key',   d.api_key);
+    localStorage.setItem('nm_user_name', d.name);
+    localStorage.setItem('nm_user_email',d.email);
+
+  } catch (err) {
+    showAlert('reg-error', 'Cannot reach server. Is it running?');
+  } finally {
+    btn.disabled = false;
+    if (btn.style.display !== 'none') btn.textContent = 'Get my API key';
+  }
+}
+
+// ── COPY KEY ─────────────────────────────────────────────────
+function copyKey() {
+  const val = document.getElementById('revealed-key').value;
+  navigator.clipboard.writeText(val).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// ── CONTINUE ─────────────────────────────────────────────────
+function continueToApp() {
+  window.location.href = 'index.html';
+}
+
+// ── Enter key support ─────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const active = document.querySelector('.panel.active').id;
+  if (active === 'panel-login')    doLogin();
+  if (active === 'panel-register') {
+    const btn = document.getElementById('continue-btn');
+    if (btn.style.display !== 'none') continueToApp();
+    else doRegister();
+  }
+});
+
+// ── Auth guard: if already logged in, go straight to app ─────
+if (localStorage.getItem('nm_api_key')) {
+  window.location.href = 'index.html';
+}
+</script>
+</body>
+</html>
