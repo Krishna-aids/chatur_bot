@@ -10,7 +10,7 @@ from .context_builder import build_context
 from .decision_engine import run_decision_engine
 from .intent_router import route_intent
 from .llm_service import generate_response
-from .models import InputPayload
+from .models import ActionResult, DecisionResult, InputPayload
 from .store import store
 
 logger = logging.getLogger("chatur.pipeline")
@@ -39,7 +39,14 @@ async def run_chat_pipeline(
     payload = InputPayload(user_id=user_id, session_id=session_id, text=query, raw_attachments=raw_attachments or [])
     context = await build_context(payload)
     intent = route_intent(payload.text)
-    decision = run_decision_engine(intent, context)
+    if intent.intent == "POLICY_QUERY":
+        decision = DecisionResult(
+            allowed_actions=["provide_information"],
+            priority_action="provide_information",
+            reason="Policy query handled via RAG explanation",
+        )
+    else:
+        decision = run_decision_engine(intent, context)
 
     context["session_id"] = session_id
     context["decision"] = {
@@ -52,7 +59,10 @@ async def run_chat_pipeline(
     }
 
     llm_output = await generate_response(context)
-    action_result = await execute_action(llm_output["action"], context)
+    if intent.intent == "POLICY_QUERY":
+        action_result = ActionResult(True, "success", "No state-changing action for policy query")
+    else:
+        action_result = await execute_action(llm_output["action"], context)
 
     await asyncio.gather(
         store.save_message(session_id, "user", query),

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import logging
+import re
 from contextlib import asynccontextmanager
-from datetime import datetime
+from pathlib import Path
 
 import httpx
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -27,11 +27,6 @@ from backend.models import (
 from backend.pipeline import run_chat_pipeline
 from backend.settings import settings
 from backend.store import store
-from services.action_executor import execute_action
-from services.context_builder import build_context
-from services.decision_engine import make_decision
-from services.intent_router import route_intent
-from services.llm_service import generate_response
 
 AGENT_TIMEOUT = 25
 MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -51,7 +46,7 @@ app = FastAPI(title="Chatur MVP API", version=settings.app_version, lifespan=lif
 app.include_router(auth_router)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -60,11 +55,13 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
+    rag_path = Path(settings.rag_data_path)
     return {
         "status": "ok",
         "version": settings.app_version,
         "llm": "configured" if settings.groq_api_key else "mock-mode",
         "model_70b": settings.groq_model,
+        "rag_docs": len(list(rag_path.glob("**/*"))) if rag_path.exists() else 0,
     }
 
 
@@ -75,45 +72,74 @@ async def new_session(request: NewSessionRequest, auth: dict = Depends(verify_ap
     return NewSessionResponse(**session)
 
 
+async def _parse_chat_input(request: Request, auth: dict) -> dict:
+    content_type = request.headers.get("content-type", "").lower()
+    payload: dict = {"message": "", "user_id": auth.get("user_id", "anonymous@example.com"), "session_id": "", "input_type": "text"}
+    file_obj: UploadFile | None = None
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        payload["message"] = str(form.get("message") or form.get("query") or "").strip()
+        payload["user_id"] = str(form.get("user_id") or payload["user_id"]).strip() or payload["user_id"]
+        payload["session_id"] = str(form.get("session_id") or "").strip()
+        payload["input_type"] = str(form.get("input_type") or "text").strip().lower()
+        incoming_file = form.get("file")
+        if isinstance(incoming_file, UploadFile):
+            file_obj = incoming_file
+    else:
+        body = await request.json()
+        payload["message"] = str(body.get("message") or body.get("query") or "").strip()
+        payload["user_id"] = str(body.get("user_id") or payload["user_id"]).strip() or payload["user_id"]
+        payload["session_id"] = str(body.get("session_id") or "").strip()
+        payload["input_type"] = str(body.get("input_type") or "text").strip().lower()
+
+    payload["file"] = file_obj
+    return payload
+
+
+async def _mock_file_signal(file_obj: UploadFile | None, input_type: str) -> str:
+    if not file_obj:
+        return ""
+
+    file_name = (file_obj.filename or "uploaded_file").lower()
+    is_image = input_type == "image" or file_name.endswith((".png", ".jpg", ".jpeg", ".webp"))
+    is_pdf = input_type == "pdf" or file_name.endswith(".pdf")
+
+    if is_image:
+        return "Image received. Mock damage detection suggests possible visible damage."
+
+    if is_pdf:
+        raw_bytes = await file_obj.read()
+        decoded = raw_bytes.decode("utf-8", errors="ignore")
+        match = re.search(r"(ORD[-\s]?\d+)", decoded, flags=re.IGNORECASE) or re.search(
+            r"(ORD[-\s]?\d+)", file_name, flags=re.IGNORECASE
+        )
+        order_id = match.group(1).replace(" ", "") if match else "not found"
+        return f"PDF received. Mock extraction result: order_id={order_id}."
+
+    return f"File '{file_name}' received."
+
+
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, auth: dict = Depends(verify_api_key)):
-    user_id = auth.get("user_id", "anonymous@example.com")
+async def chat(request: Request, auth: dict = Depends(verify_api_key)):
     try:
-        context = await build_context(user_id=user_id, session_id=request.session_id, text=request.query)
-        intent_result = await route_intent(context=context)
-        decision_result = await make_decision(context=context, intent_result=intent_result)
-        llm_result = await generate_response(
-            context=context,
-            intent_result=intent_result,
-            decision_result=decision_result,
+        parsed = await _parse_chat_input(request, auth)
+        user_id = parsed["user_id"]
+
+        session_id = parsed["session_id"]
+        if not session_id:
+            session = await store.create_session(user_id=user_id)
+            session_id = session["session_id"]
+
+        message = parsed["message"] or "Hi"
+        file_signal = await _mock_file_signal(parsed["file"], parsed["input_type"])
+        if file_signal:
+            message = f"{message}\n{file_signal}" if message else file_signal
+
+        result = await asyncio.wait_for(
+            run_chat_pipeline(user_id=user_id, session_id=session_id, query=message),
+            timeout=AGENT_TIMEOUT,
         )
-        action_result = await execute_action(
-            context=context,
-            decision_result=decision_result,
-            llm_result=llm_result,
-        )
-        result = {
-            "message": llm_result["message"],
-            "action": llm_result["action"],
-            "status": action_result["status"],
-            "response": llm_result["message"],
-            "route": "TOOL",
-            "session_id": request.session_id,
-            "reason_trace": {
-                "pipeline": [
-                    "context_builder",
-                    "intent_router",
-                    "decision_engine",
-                    "llm_service",
-                    "action_executor",
-                ],
-                "intent_result": intent_result,
-                "decision_result": decision_result,
-                "action_result": action_result,
-            },
-            "audio_bytes": None,
-            "chunk_batches": [],
-        }
     except asyncio.TimeoutError:
         result = {
             "message": "I'm taking too long to respond. Please try again.",
@@ -121,8 +147,21 @@ async def chat(request: ChatRequest, auth: dict = Depends(verify_api_key)):
             "status": "failure",
             "response": "I'm taking too long to respond. Please try again.",
             "route": "TIMEOUT",
-            "session_id": request.session_id,
+            "session_id": "",
             "reason_trace": {"error": "timeout"},
+            "audio_bytes": None,
+            "chunk_batches": [],
+        }
+    except Exception as exc:
+        logger.exception("chat request failed: %s", exc)
+        result = {
+            "message": "I hit a temporary issue, but I can still help. Please try again.",
+            "action": "provide_information",
+            "status": "failure",
+            "response": "I hit a temporary issue, but I can still help. Please try again.",
+            "route": "FALLBACK",
+            "session_id": "",
+            "reason_trace": {"error": str(exc)},
             "audio_bytes": None,
             "chunk_batches": [],
         }
@@ -250,4 +289,10 @@ async def voice_chunk(request: VoiceChunkRequest, auth: dict = Depends(verify_ap
     _ = auth
     _ = request
     return {"audio_b64": None}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("main:app", host="0.0.0.0", port=settings.port, reload=False)
 

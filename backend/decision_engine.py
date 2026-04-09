@@ -18,14 +18,23 @@ def _days_since(iso_date: str) -> int | None:
 def run_decision_engine(intent: IntentResult, context: dict) -> DecisionResult:
     facts = context["facts"]
     rules = context["rules"]
+    product_policy = rules.get("product_policy", {})
+    refund_policy = rules.get("refund_policy", {})
+    marketplace_policy = rules.get("marketplace_policy", {})
     memory = context["memory"]
     task = context["task"].lower()
 
     if intent.intent == "RETURN_REQUEST":
         days_since_delivery = _days_since(facts.get("delivery_date", ""))
-        return_window = int(rules.get("return_window_days", 30))
+        return_window = int(product_policy.get("return_window_days", 30))
         if days_since_delivery is not None and days_since_delivery > return_window:
             return DecisionResult(["deny_return"], "deny_return", "Outside return window")
+        if facts.get("seller_type") == "third_party" and marketplace_policy.get("return_allowed", True):
+            return DecisionResult(
+                ["request_evidence", "escalate"],
+                "request_evidence",
+                "Third-party marketplace return requires verification",
+            )
         if memory.get("refund_count", 0) > int(rules.get("max_returns_per_month", 3)):
             return DecisionResult(["escalate"], "escalate", "Refund abuse risk based on behavior")
         has_evidence = bool(context.get("evidence"))
@@ -37,7 +46,12 @@ def run_decision_engine(intent: IntentResult, context: dict) -> DecisionResult:
         return DecisionResult(["provide_tracking"], "provide_tracking", "Informational order status request")
 
     if intent.intent == "REFUND_STATUS":
-        return DecisionResult(["provide_information", "escalate"], "provide_information", "Refund status request")
+        refund_days = int(refund_policy.get("refund_time_days", 7))
+        return DecisionResult(
+            ["provide_information", "escalate"],
+            "provide_information",
+            f"Refund policy timeline is {refund_days} days",
+        )
 
     if intent.intent == "CANCELLATION":
         if facts.get("order_status") in {"pending", "processing"}:
@@ -52,6 +66,9 @@ def run_decision_engine(intent: IntentResult, context: dict) -> DecisionResult:
         if any(t in task for t in triggers) or memory.get("complaint_count", 0) >= 3:
             return DecisionResult(["escalate"], "escalate", "Escalation trigger hit")
         return DecisionResult(["log_complaint", "escalate"], "log_complaint", "Standard complaint flow")
+
+    if intent.intent == "POLICY_QUERY":
+        return DecisionResult(["provide_information"], "provide_information", "Policy explanations are served from RAG")
 
     return DecisionResult(["provide_information"], "provide_information", "General conversational fallback")
 

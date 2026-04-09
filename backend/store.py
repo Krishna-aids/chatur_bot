@@ -19,17 +19,54 @@ class InMemoryStore:
         self.event_logs: list[dict[str, Any]] = []
         self.action_receipts: set[tuple[str, str, str]] = set()
         self.orders_by_user: dict[str, dict[str, Any]] = {}
-        self.product_policy: dict[str, Any] = {
-            "return_window_days": 30,
-            "max_returns_per_month": 3,
-            "auto_refund_threshold_inr": 500,
-            "refund_methods": ["original_payment", "store_credit"],
-            "escalation_triggers": ["abusive", "legal_threat", "repeat_complaint"],
-        }
+        # Policy tables (DB truth for decisions)
+        self.product_policies: dict[str, dict[str, Any]] = {}
+        self.refund_policies: dict[str, dict[str, Any]] = {}
+        self.marketplace_policies: dict[str, dict[str, Any]] = {}
+        self.privacy_policies: list[dict[str, Any]] = []
         self._seed_defaults()
 
     def _seed_defaults(self) -> None:
         self.register_user(name="Demo User", email="demo@example.com", api_key="nm_demo_key")
+        self.product_policies = {
+            "P-ELEC-1001": {
+                "product_id": "P-ELEC-1001",
+                "return_window_days": 7,
+                "replacement_allowed": True,
+                "warranty_months": 12,
+                "category": "electronics",
+            },
+            "P-FASH-2001": {
+                "product_id": "P-FASH-2001",
+                "return_window_days": 3,
+                "replacement_allowed": False,
+                "warranty_months": 0,
+                "category": "fashion",
+            },
+        }
+        self.refund_policies = {
+            "electronics": {"category": "electronics", "refund_time_days": 7, "refund_mode": "bank"},
+            "fashion": {"category": "fashion", "refund_time_days": 5, "refund_mode": "wallet"},
+        }
+        self.marketplace_policies = {
+            "first_party": {
+                "seller_type": "first_party",
+                "return_allowed": True,
+                "dispute_resolution": "standard_support",
+            },
+            "third_party": {
+                "seller_type": "third_party",
+                "return_allowed": True,
+                "dispute_resolution": "seller_mediation",
+            },
+        }
+        self.privacy_policies = [
+            {
+                "data_usage": "Order support and service quality improvements",
+                "retention_days": 365,
+                "user_rights": "Access, correction, deletion on request",
+            }
+        ]
         now = datetime.utcnow().date()
         self.orders_by_user["demo@example.com"] = {
             "order_id": "ORD-1001",
@@ -37,10 +74,12 @@ class InMemoryStore:
             "order_date": (now - timedelta(days=5)).isoformat(),
             "delivery_date": (now - timedelta(days=2)).isoformat(),
             "items": ["wireless mouse"],
+            "product_id": "P-ELEC-1001",
+            "category": "electronics",
+            "seller_type": "first_party",
             "payment_status": "paid",
             "refund_status": "none",
             "tracking_number": "TRK-92711",
-            "return_window_days": 30,
         }
 
     def register_user(self, name: str, email: str, api_key: str | None = None) -> dict[str, Any]:
@@ -55,10 +94,12 @@ class InMemoryStore:
                 "order_date": datetime.utcnow().date().isoformat(),
                 "delivery_date": (datetime.utcnow().date() + timedelta(days=2)).isoformat(),
                 "items": ["starter kit"],
+                "product_id": "P-FASH-2001",
+                "category": "fashion",
+                "seller_type": "third_party",
                 "payment_status": "paid",
                 "refund_status": "none",
                 "tracking_number": f"TRK-{uuid.uuid4().hex[:6].upper()}",
-                "return_window_days": 30,
             }
         return user
 
@@ -88,7 +129,35 @@ class InMemoryStore:
         return dict(self.orders_by_user.get(user_id.lower(), {}))
 
     async def get_policy(self) -> dict[str, Any]:
-        return dict(self.product_policy)
+        # Backward compatible aggregate rules payload.
+        sample_product_policy = self.product_policies.get("P-ELEC-1001", {})
+        sample_refund_policy = self.refund_policies.get(sample_product_policy.get("category", ""), {})
+        return {
+            "product_policy": dict(sample_product_policy),
+            "refund_policy": dict(sample_refund_policy),
+            "marketplace_policy": dict(self.marketplace_policies.get("first_party", {})),
+            "privacy_policy": dict(self.privacy_policies[0]) if self.privacy_policies else {},
+            "max_returns_per_month": 3,
+            "escalation_triggers": ["abusive", "legal_threat", "repeat_complaint"],
+        }
+
+    async def get_product_policy(self, product_id: str) -> dict[str, Any]:
+        if not product_id:
+            return {}
+        return dict(self.product_policies.get(product_id, {}))
+
+    async def get_refund_policy(self, category: str) -> dict[str, Any]:
+        if not category:
+            return {}
+        return dict(self.refund_policies.get(category.lower(), {}))
+
+    async def get_marketplace_policy(self, seller_type: str) -> dict[str, Any]:
+        if not seller_type:
+            return {}
+        return dict(self.marketplace_policies.get(seller_type.lower(), {}))
+
+    async def get_privacy_policy(self) -> dict[str, Any]:
+        return dict(self.privacy_policies[0]) if self.privacy_policies else {}
 
     async def log_event(self, user_id: str, intent: str, action: str, status: str, trace_id: str) -> None:
         async with self._lock:

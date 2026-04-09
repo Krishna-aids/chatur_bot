@@ -104,8 +104,8 @@ function bindEvents() {
   document.getElementById('file-input').addEventListener('change',  handleFileAttach);
   document.getElementById('image-input').addEventListener('change', handleImageAttach);
 
-  // voice modal open
-  document.getElementById('btn-voice').addEventListener('click', openVoiceModal);
+  // browser speech-to-text voice input
+  document.getElementById('btn-voice').addEventListener('click', startVoiceInput);
   document.getElementById('voice-cancel-btn').addEventListener('click', closeVoiceModal);
 
   // suggestion pills
@@ -538,9 +538,10 @@ function sendSuggestion(text) {
   updateSendButton(); sendMessage();
 }
 
-async function sendMessage() {
+async function sendMessage(options = {}) {
   const textarea = document.getElementById('user-input');
-  const text     = textarea.value.trim();
+  const inputTypeHint = options.inputType || 'text';
+  const text          = (typeof options.overrideText === 'string' ? options.overrideText : textarea.value).trim();
   if ((!text && !state.attachments.length) || state.isLoading) return;
 
   state.isLoading = true; updateSendButton();
@@ -559,23 +560,7 @@ async function sendMessage() {
 
   const fileAtts  = state.attachments.filter(a => a.type === 'file');
   const imageAtts = state.attachments.filter(a => a.type === 'image');
-  const uploadedNames = [];
-  for (const att of fileAtts) {
-    try {
-      const form = new FormData();
-      form.append('file', att.fileObj);
-      form.append('user_id', USER_EMAIL || USER_NAME);
-      form.append('source', att.name);
-      const r = await fetch(`${API_BASE}/upload`, { method:'POST', headers:{'x-api-key':API_KEY}, body:form });
-      const d = await r.json();
-      uploadedNames.push(r.ok ? `${att.name} (uploaded)` : `${att.name} (failed)`);
-    } catch { uploadedNames.push(`${att.name} (error)`); }
-  }
-
-  // Fix 2: start doc status polling for each uploaded file
-  if (fileAtts.length > 0) {
-    setTimeout(() => fileAtts.forEach(att => pollDocStatus(att.name)), 500);
-  }
+  const uploadedNames = [...fileAtts.map(f => f.name), ...imageAtts.map(i => i.name)];
 
   const userContent = text || (fileAtts.length ? `Uploaded: ${fileAtts.map(f=>f.name).join(', ')}` : '');
   const userMsg = { role:'user', content:userContent, imageDataUrl:imageAtts[0]?.dataUrl||null, fileName:uploadedNames.join(', ')||null };
@@ -591,96 +576,81 @@ async function sendMessage() {
   if (!query && uploadedNames.length) query = `I uploaded: ${fileAtts.map(f=>f.name).join(', ')}. Please acknowledge.`;
   if (!query && imageAtts.length)     query = 'What do you see in this image?';
 
-  // Fix 1: SSE streaming chat — tokens appear word-by-word
+  // Unified /chat integration (JSON for text, FormData for attachments)
   try {
-    const r = await fetch(`${API_BASE}/chat/stream`, {
-      method: 'POST', headers: AUTH_HEADERS,
-      body: JSON.stringify({ query, session_id: session.backendId, input_type:'text', output_voice:false }),
-    });
-
-    if (!r.ok) {
-      removeTypingIndicator();
-      const errData = await r.json().catch(() => ({}));
-      appendErrorMessage(errData.detail?.message || errData.detail || 'Request failed.');
-      state.isLoading = false; updateSendButton();
-      return;
-    }
-
-    removeTypingIndicator();
-
-    // Create empty bot message bubble for streaming
-    const botMsg = { role:'assistant', content:'', route:'CHAT', reasonTrace:null };
-    session.messages.push(botMsg);
-    const row = appendMessageDOM(botMsg);
-    const bubble = row.querySelector('.msg-bubble');
-
-    // Read SSE stream
-    const reader = r.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText = '';
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      // Parse SSE lines
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // keep incomplete line in buffer
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const chunk = line.slice(6);
-        if (chunk === '[DONE]') break;
-        if (chunk.startsWith('[ERROR]')) {
-          appendErrorMessage(chunk.slice(7).trim());
-          break;
-        }
-        // Handle route badge event emitted by the fixed pipeline
-        if (chunk.startsWith('[ROUTE]')) {
-          const route = chunk.slice(7).trim();
-          botMsg.route = route;
-          updateRouteBadge(route);
-          continue;
-        }
-        fullText += chunk;
-        // Defensive strip: remove any [ROUTE] or TOOL_CALL text that slipped through
-        fullText = fullText.replace(/\[ROUTE\][A-Z]+/g, '').replace(/TOOL_CALL:[^\n]*/g, '').trimStart();
-        bubble.innerHTML = formatMessage(fullText);
-        scrollToBottom();
-      }
-    }
-
-    // Finalize
-    botMsg.content = fullText;
-    updateRouteBadge(botMsg.route || 'CHAT');
-    saveSessions();
-
-  } catch (err) {
-    removeTypingIndicator();
-    // Fallback: try regular /chat if stream fails
-    try {
-      const r2 = await fetch(`${API_BASE}/chat`, {
-        method: 'POST', headers: AUTH_HEADERS,
-        body: JSON.stringify({ query, session_id: session.backendId, input_type:'text', output_voice:false }),
+    let response;
+    if (fileAtts.length || imageAtts.length) {
+      const att = imageAtts[0] || fileAtts[0];
+      const type = att.type === 'image' ? 'image' : (att.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'file');
+      const form = new FormData();
+      form.append('user_id', USER_EMAIL || 'U1');
+      form.append('message', query);
+      form.append('input_type', type);
+      form.append('session_id', session.backendId || '');
+      form.append('file', att.fileObj, att.name);
+      response = await fetch(`${API_BASE}/chat`, { method:'POST', headers:{ 'x-api-key': API_KEY }, body: form });
+    } else {
+      response = await fetch(`${API_BASE}/chat`, {
+        method: 'POST',
+        headers: AUTH_HEADERS,
+        body: JSON.stringify({
+          user_id: USER_EMAIL || 'U1',
+          message: query,
+          input_type: inputTypeHint,
+          file: null,
+          session_id: session.backendId,
+        }),
       });
-      const data = await r2.json();
-      if (r2.ok) {
-        const botMsg = { role:'assistant', content:data.response, route:data.route, reasonTrace:data.reason_trace };
-        session.messages.push(botMsg);
-        appendMessageDOM(botMsg);
-        updateRouteBadge(data.route);
-        saveSessions();
-      } else {
-        appendErrorMessage(data.detail?.message || data.detail || 'Request failed.');
-      }
-    } catch {
-      appendErrorMessage('Cannot reach Chatur server. Is it running?');
     }
+
+    const data = await response.json();
+    removeTypingIndicator();
+    if (!response.ok) {
+      appendErrorMessage(data.detail?.message || data.detail || data.message || 'Request failed.');
+    } else {
+      const botMsg = {
+        role: 'assistant',
+        content: data.message || data.response || '',
+        route: data.route || 'TOOL',
+        reasonTrace: data.reason_trace || null,
+      };
+      session.messages.push(botMsg);
+      appendMessageDOM(botMsg);
+      updateRouteBadge(botMsg.route);
+      saveSessions();
+    }
+  } catch {
+    removeTypingIndicator();
+    appendErrorMessage('Cannot reach Chatur server. Is it running?');
   } finally {
     state.isLoading = false; updateSendButton();
   }
+}
+
+function startVoiceInput() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    appendErrorMessage('Voice input is not supported in this browser.');
+    return;
+  }
+
+  const recognition = new Recognition();
+  recognition.lang = localStorage.getItem('nm_voice_lang') || 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognition.onresult = (event) => {
+    const transcript = event.results?.[0]?.[0]?.transcript?.trim() || '';
+    if (!transcript) {
+      appendErrorMessage("Couldn't detect speech. Please try again.");
+      return;
+    }
+    const input = document.getElementById('user-input');
+    input.value = transcript;
+    handleTextareaInput();
+    sendMessage({ overrideText: transcript, inputType: 'text' });
+  };
+  recognition.onerror = () => appendErrorMessage('Voice recognition failed. Please try again.');
+  recognition.start();
 }
 
 // ── ATTACHMENTS ────────────────────────────────────────────────
